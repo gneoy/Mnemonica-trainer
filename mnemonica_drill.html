@@ -130,6 +130,12 @@
   .r-time { color: var(--muted); font-size: 0.8rem; }
   .times { margin: 0; font-variant-numeric: tabular-nums; }
   .tag { font-size: 0.75rem; color: var(--red); border: 1px solid currentColor; padding: 0 4px; margin-left: 6px; font-weight: 400; white-space: nowrap; }
+  .ready { display: flex; flex-direction: column; align-items: center; gap: 12px; padding-block: 48px; border-block: 1px solid var(--line); text-align: center; }
+  .ready p { margin: 0; }
+  .ready-mode { font-size: 1.3rem; font-weight: 700; }
+  .ready-sub { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ready-note { color: var(--muted); font-size: 0.85rem; }
+  .start { font-size: 1.1rem; padding: 12px 48px; margin-top: 8px; }
   .quiz { display: flex; flex-direction: column; gap: 24px; }
   .result { display: flex; flex-direction: column; gap: 12px; }
   .result h2 { font-size: 1.1rem; margin: 0; }
@@ -173,7 +179,14 @@
     <button type="button" class="apply ghost" id="range-all">전체</button>
   </form>
 
-  <div class="quiz" id="quiz">
+  <section class="ready" id="ready" aria-labelledby="ready-title">
+    <p class="ready-mode" id="ready-title"></p>
+    <p class="ready-sub" id="ready-sub"></p>
+    <button type="button" class="go start" id="start">시작</button>
+    <p class="ready-note">시작을 누르면 첫 문제와 타이머가 함께 시작됩니다.</p>
+  </section>
+
+  <div class="quiz" id="quiz" hidden>
     <div class="meta">
       <span id="progress">1 / 52</span>
       <span id="score">맞힘 0 · 틀림 0</span>
@@ -275,7 +288,8 @@
     mCard: document.getElementById('mode-card'), mNum: document.getElementById('mode-num'),
     mList: document.getElementById('mode-list'), list: document.getElementById('list'),
     range: document.getElementById('range-form'),
-    quiz: document.getElementById('quiz'), result: document.getElementById('result')
+    quiz: document.getElementById('quiz'), result: document.getElementById('result'),
+    ready: document.getElementById('ready')
   };
 
   // Each question gets one retry. A right answer on either try counts as right.
@@ -306,7 +320,17 @@
 
   function rightCount() { return log.filter(function (r) { return r.ok; }).length; }
 
+  // Waits on a start screen; nothing is timed until 시작 is pressed
+  function showReady() {
+    clearTimeout(timer); stopTick();
+    el.quiz.hidden = true; el.result.hidden = true; el.ready.hidden = false;
+    document.getElementById('ready-title').textContent = mode === 'card' ? '카드 → 번호' : '번호 → 카드';
+    document.getElementById('ready-sub').textContent = (lo === 1 && hi === 52 ? '전체 ' : lo + '–' + hi + '번 · ') + (hi - lo + 1) + '장';
+    document.getElementById('start').focus();
+  }
+
   function startRound() {
+    el.ready.hidden = true;
     clearTimeout(timer);
     order = [];
     for (var i = lo - 1; i < hi; i++) order.push(i);
@@ -414,7 +438,7 @@
     if (a > b) { var t = a; a = b; b = t; }
     lo = a; hi = b; rLo.value = lo; rHi.value = hi;
     try { localStorage.setItem('mnemonica-range', JSON.stringify([lo, hi])); } catch (e) {}
-    startRound();
+    showReady();
   }
 
   document.getElementById('range-form').addEventListener('submit', function (e) {
@@ -422,7 +446,8 @@
     setRange(Number(rLo.value), Number(rHi.value));
   });
   document.getElementById('range-all').addEventListener('click', function () { setRange(1, 52); });
-  document.getElementById('done').addEventListener('click', startRound);
+  document.getElementById('done').addEventListener('click', showReady);
+  document.getElementById('start').addEventListener('click', startRound);
 
   // 4 columns of 13, read top to bottom: 1–13, 14–26, 27–39, 40–52
   document.getElementById('rows').innerHTML = [0, 13, 26, 39].map(function (start) {
@@ -440,11 +465,11 @@
     el.range.hidden = isList;
     if (isList) {
       clearTimeout(timer); stopTick();
-      el.quiz.hidden = true; el.result.hidden = true;
+      el.quiz.hidden = true; el.result.hidden = true; el.ready.hidden = true;
       return;
     }
     mode = m;
-    startRound();
+    showReady();
   }
 
   el.form.addEventListener('submit', function (e) {
@@ -502,6 +527,6 @@
   el.mList.addEventListener('click', function () { setMode('list'); });
 
   window.__parseCard = parseCard;
-  startRound();
+  showReady();
 })();
 </script>
