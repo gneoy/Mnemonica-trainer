@@ -83,8 +83,8 @@
   .feedback.bad { color: var(--red); }
 
   /* Tabs */
-  .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--fg); border: 1px solid var(--fg); }
-  .modes button { font-size: 0.95rem; padding: 10px 8px; background: var(--bg); color: var(--fg); border: 0; }
+  .modes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--fg); border: 1px solid var(--fg); }
+  .modes button { font-size: 0.9rem; padding: 10px 4px; background: var(--bg); color: var(--fg); border: 0; }
   .modes button[aria-pressed="true"] { background: var(--fg); color: var(--bg); font-weight: 500; }
 
   /* Settings rows */
@@ -178,6 +178,29 @@
   .cell em { font-style: normal; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.4em; text-align: right; }
   .cell b { font-family: var(--font-index); font-weight: 600; font-size: 1rem; white-space: nowrap; }
 
+  /* Active stack line */
+  .stack-now { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: -12px; color: var(--muted); font-size: 0.85rem; }
+  .stack-now b { color: var(--fg); font-weight: 500; }
+
+  /* Custom stack */
+  .custom { display: flex; flex-direction: column; gap: 14px; }
+  .custom label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+  .custom input { font-size: 1rem; padding: 8px 12px; }
+  .custom textarea {
+    font: inherit; font-size: 1rem; line-height: 1.7;
+    min-height: 9.5em; padding: 8px 12px; resize: vertical;
+    background: var(--bg); color: var(--fg); border: 1px solid var(--fg); border-radius: 0;
+  }
+  .custom textarea:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .cs-add { display: flex; gap: 8px; align-items: center; }
+  .cs-add span { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+  .cs-add input { font-size: 1.1rem; padding: 6px 12px; }
+  .cs-status { font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+  .cs-status.ok { color: var(--ok); }
+  .cs-status ul { margin: 4px 0 0; padding-left: 1.1em; color: var(--red); }
+  .cs-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cs-actions button:disabled { opacity: 0.35; cursor: not-allowed; }
+
   /* On-screen keypads (touch devices only) */
   .keypad { display: flex; flex-direction: column; gap: 6px; }
   .kp-grid { display: grid; gap: 6px; }
@@ -206,6 +229,11 @@
   .ac-form input.active { outline: 2px solid var(--fg); outline-offset: 0; }
 
   /* Phones: tighter spacing, smaller card so the keypad fits on screen */
+  @media (max-width: 520px) {
+    .modes { grid-template-columns: repeat(3, 1fr); }
+    .modes button { padding: 10px 2px; }
+    .modes button:last-child { grid-column: span 2; }
+  }
   @media (max-width: 480px) {
     .wrap { padding-block: 12px 24px; gap: 14px; }
     h1 { font-size: 1.1rem; }
@@ -234,8 +262,6 @@
   }
 
   @media (max-width: 420px) {
-    .modes { grid-template-columns: repeat(2, 1fr); }
-    .modes button { font-size: 0.9rem; padding: 10px 2px; }
     .rows { gap: 0 8px; }
     .cell { gap: 5px; }
   }
@@ -243,12 +269,17 @@
 
 <div class="wrap">
   <h1>Mnemonica 암기 훈련</h1>
+  <p class="stack-now">
+    <span>현재 스택: <b id="stack-name">네모니카</b></span>
+    <button type="button" class="skip" id="stack-revert" hidden>네모니카로 되돌리기</button>
+  </p>
 
   <div class="modes" role="group" aria-label="연습 방식">
     <button type="button" data-mode="card" aria-pressed="true">카드 → 번호</button>
     <button type="button" data-mode="num" aria-pressed="false">번호 → 카드</button>
     <button type="button" data-mode="list" aria-pressed="false">전체 순서</button>
     <button type="button" data-mode="acaan" aria-pressed="false">ACAAN</button>
+    <button type="button" data-mode="custom" aria-pressed="false">커스텀 스택</button>
   </div>
 
   <div class="settings" id="settings">
@@ -315,7 +346,7 @@
   </section>
 
   <section class="acaan" id="acaan" hidden aria-label="ACAAN 트레이너">
-    <p class="muted">덱은 Mnemonica 순서(4♣가 맨 위)에서 시작합니다. 위에서 몇 장을 아래로 컷해야 고른 카드가 말한 숫자 번째에 오는지 답하세요.</p>
+    <p class="muted">덱은 <span id="ac-stack">네모니카</span> 순서(<span id="ac-top">4♣</span>가 맨 위)에서 시작합니다. 위에서 몇 장을 아래로 컷해야 고른 카드가 말한 숫자 번째에 오는지 답하세요.</p>
     <p class="muted ac-score" id="ac-score">맞힘 0 · 틀림 0</p>
     <div class="ac-q">
       <div id="ac-card"></div>
@@ -337,7 +368,23 @@
     </div>
   </section>
 
-  <section class="list" id="list" hidden aria-label="Mnemonica 전체 순서">
+  <section class="custom" id="custom" hidden aria-label="커스텀 스택">
+    <p class="muted">내 스택 52장을 1번(맨 위)부터 순서대로 입력하세요. 카드 사이는 띄어쓰기, 쉼표, 줄바꿈으로 구분합니다. 예: <code>4C 2H 7D</code> 또는 <code>4♣ 2♥ 7♦</code>. 저장하면 모든 탭이 이 스택으로 바뀝니다.</p>
+    <label>스택 이름<input id="cs-name" type="text" maxlength="30" placeholder="예: Aronson"></label>
+    <label>카드 순서<textarea id="cs-cards" spellcheck="false" autocapitalize="characters" placeholder="4C 2H 7D 3C 4H …"></textarea></label>
+    <div class="cs-add" id="cs-add" hidden>
+      <span>카드 추가</span>
+      <input id="cs-pick" type="text" readonly aria-label="추가할 카드">
+    </div>
+    <div class="keypad" id="cs-keypad" hidden></div>
+    <div class="cs-status" id="cs-status" role="status"></div>
+    <div class="cs-actions">
+      <button type="button" class="go" id="cs-save" disabled>이 스택 사용</button>
+      <button type="button" class="apply ghost" id="cs-revert">네모니카로 되돌리기</button>
+    </div>
+  </section>
+
+  <section class="list" id="list" hidden aria-label="전체 순서">
     <p class="muted">1번이 덱 맨 위 카드입니다. 13장씩 4열, 위에서 아래로.</p>
     <div class="rows" id="rows"></div>
   </section>
@@ -350,9 +397,11 @@
   /* ---------- Data ---------- */
 
   // Mnemonica order, positions 1–52 (Tamariz, Mnemonica p.14)
-  var STACK = '4C 2H 7D 3C 4H 6D AS 5H 9S 2S QH 3D QC 8H 6S 5S 9H KC 2D JH 3S 8S 6H 10C 5D KD 2C 3H 8D 5C KS JD 8C 10S KH JC 7S 10H AD 4S 7H 4D AC 9C JS QD 7C QS 10D 6C AH 9D'.split(' ');
-  var POS = {};                       // card code → position (1–52)
-  STACK.forEach(function (c, i) { POS[c] = i + 1; });
+  var MNEMONICA = '4C 2H 7D 3C 4H 6D AS 5H 9S 2S QH 3D QC 8H 6S 5S 9H KC 2D JH 3S 8S 6H 10C 5D KD 2C 3H 8D 5C KS JD 8C 10S KH JC 7S 10H AD 4S 7H 4D AC 9C JS QD 7C QS 10D 6C AH 9D'.split(' ');
+  // The stack every tab trains on: Mnemonica, or the viewer's own saved stack
+  var STACK = MNEMONICA, POS = {}, stackName = '네모니카';
+  function indexStack() { POS = {}; STACK.forEach(function (c, i) { POS[c] = i + 1; }); }
+  indexStack();
   var SYM = { S: '♠', H: '♥', D: '♦', C: '♣' };
   var SUIT_NAME = { S: '스페이드', H: '하트', D: '다이아몬드', C: '클럽' };
   var MODE_TITLE = { card: '카드 → 번호', num: '번호 → 카드' };
@@ -437,12 +486,12 @@
   var RANK_KEYS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
   var SUIT_KEYS = ['S', 'H', 'D', 'C'];
 
-  function padHTML(type) {
+  function padHTML(type, okLabel) {
     if (type === 'num') {
       var keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(function (d) { return '<button type="button" data-k="' + d + '">' + d + '</button>'; });
       keys.push('<button type="button" class="kp-del" data-k="del" aria-label="지우기">⌫</button>',
         '<button type="button" data-k="0">0</button>',
-        '<button type="button" class="kp-ok" data-k="ok">확인</button>');
+        '<button type="button" class="kp-ok" data-k="ok">' + okLabel + '</button>');
       return '<div class="kp-grid kp-num">' + keys.join('') + '</div>';
     }
     return '<div class="kp-grid kp-ranks">' + RANK_KEYS.map(function (r, i) {
@@ -451,7 +500,7 @@
       '<div class="kp-grid kp-suits">' + SUIT_KEYS.map(function (s) {
         return '<button type="button" data-k="s" data-v="' + SYM[s] + '" aria-label="' + SUIT_NAME[s] + '"' + (s === 'H' || s === 'D' ? ' class="red"' : '') + '>' + SYM[s] + '</button>';
       }).join('') + '</div>' +
-      '<div class="kp-grid kp-actions"><button type="button" class="kp-del" data-k="del">⌫ 지우기</button><button type="button" class="kp-ok" data-k="ok">확인</button></div>';
+      '<div class="kp-grid kp-actions"><button type="button" class="kp-del" data-k="del">⌫ 지우기</button><button type="button" class="kp-ok" data-k="ok">' + okLabel + '</button></div>';
   }
 
   // Card field holds "rank + suit symbol", e.g. "Q♥"; either part can be picked first
@@ -470,12 +519,13 @@
     });
   }
 
-  function renderPad(pad, type, input, submit) {
+  function renderPad(pad, type, input, submit, okLabel) {
+    okLabel = okLabel || '확인';
     document.documentElement.classList.toggle('touch', isTouch());
     pad.hidden = !isTouch();
     if (pad.hidden) return;
-    if (!pad.cfg || pad.cfg.type !== type) pad.innerHTML = padHTML(type);
-    pad.cfg = { type: type, input: input, submit: submit };
+    if (!pad.cfg || pad.cfg.type !== type || pad.cfg.okLabel !== okLabel) pad.innerHTML = padHTML(type, okLabel);
+    pad.cfg = { type: type, input: input, submit: submit, okLabel: okLabel };
     syncPad(pad);
   }
 
@@ -551,7 +601,7 @@
 
   var ui = {
     settings: $('settings'), ready: $('ready'), quiz: $('quiz'), result: $('result'),
-    acaan: $('acaan'), list: $('list')
+    acaan: $('acaan'), list: $('list'), custom: $('custom')
   };
   var tabs = Array.prototype.slice.call(document.querySelectorAll('.modes button'));
   var mode = 'card';
@@ -563,9 +613,11 @@
     ui.settings.hidden = !quizMode;
     ui.acaan.hidden = m !== 'acaan';
     ui.list.hidden = m !== 'list';
+    ui.custom.hidden = m !== 'custom';
     ui.ready.hidden = ui.quiz.hidden = ui.result.hidden = true;
     if (quizMode) { mode = m; showReady(); }
     else if (m === 'acaan') acNew();
+    else if (m === 'custom') csOpen();
   }
   tabs.forEach(function (b) { b.addEventListener('click', function () { setMode(b.dataset.mode); }); });
 
@@ -865,11 +917,108 @@
 
   /* ---------- Full order: 4 columns of 13, read top to bottom ---------- */
 
-  $('rows').innerHTML = [0, 13, 26, 39].map(function (start) {
-    return '<div class="row">' + STACK.slice(start, start + 13).map(function (c, i) {
-      return '<div class="cell"><em>' + (start + i + 1) + '</em><b>' + label(c) + '</b></div>';
-    }).join('') + '</div>';
-  }).join('');
+  function renderList() {
+    $('rows').innerHTML = [0, 13, 26, 39].map(function (start) {
+      return '<div class="row">' + STACK.slice(start, start + 13).map(function (c, i) {
+        return '<div class="cell"><em>' + (start + i + 1) + '</em><b>' + label(c) + '</b></div>';
+      }).join('') + '</div>';
+    }).join('');
+  }
+
+  /* ---------- Custom stack ---------- */
+
+  // Saved in this browser as { name, cards }; 'mnemonica-use-custom' says whether it is active
+  var ALL_CARDS = MNEMONICA.slice().sort();
+  var cs = {
+    name: $('cs-name'), cards: $('cs-cards'), status: $('cs-status'), save: $('cs-save'),
+    add: $('cs-add'), pick: $('cs-pick'), pad: $('cs-keypad')
+  };
+  cs.pad.addEventListener('click', onPadTap);
+
+  // Kept in memory so it works even where browser storage is blocked
+  var customStack = null;
+  function loadCustom() {
+    try {
+      var c = JSON.parse(load('mnemonica-custom') || 'null');
+      return c && checkStack(c.cards.join(' ')).ok ? c : null;
+    } catch (e) { return null; }
+  }
+
+  // Reads a pasted list: tokens split by spaces, commas or new lines; "1." or "1-" position prefixes are ignored
+  function checkStack(text) {
+    var cards = [], bad = [], seen = {}, dups = [];
+    String(text).split(/[\s,;]+/).forEach(function (tok) {
+      tok = tok.replace(/^\d+[.):\-]/, '');
+      if (!tok || /^\d+$/.test(tok)) return;
+      var c = parseCard(tok);
+      if (!c) { bad.push(tok); return; }
+      if (seen[c]) dups.push(c); else seen[c] = true;
+      cards.push(c);
+    });
+    var missing = ALL_CARDS.filter(function (c) { return !seen[c]; });
+    return { cards: cards, bad: bad, dups: dups, missing: missing, ok: cards.length === 52 && !bad.length && !dups.length };
+  }
+
+  function csValidate() {
+    var r = checkStack(cs.cards.value), issues = [];
+    if (r.bad.length) issues.push('알아볼 수 없는 카드: ' + r.bad.slice(0, 8).join(', ') + (r.bad.length > 8 ? ' …' : ''));
+    if (r.dups.length) issues.push('두 번 들어간 카드: ' + r.dups.map(label).join(', '));
+    if (r.missing.length && r.missing.length < 52) issues.push('빠진 카드 ' + r.missing.length + '장: ' + r.missing.slice(0, 12).map(label).join(' ') + (r.missing.length > 12 ? ' …' : ''));
+    cs.status.className = 'cs-status' + (r.ok ? ' ok' : '');
+    cs.status.innerHTML = r.ok
+      ? '52장 모두 확인됐어요.'
+      : '<span>' + r.cards.length + ' / 52장</span>' + (issues.length ? '<ul><li>' + issues.join('</li><li>') + '</li></ul>' : '');
+    cs.save.disabled = !r.ok;
+    return r;
+  }
+
+  function csOpen() {
+    if (!cs.cards.value && customStack) { cs.cards.value = customStack.cards.join(' '); cs.name.value = customStack.name; }
+    csValidate();
+    var touch = isTouch();
+    cs.add.hidden = !touch;
+    renderPad(cs.pad, 'card', cs.pick, csAppend, '추가');
+  }
+
+  // Touch keypad: pick rank and suit, then 추가 appends the card to the list
+  function csAppend() {
+    var c = parseCard(cs.pick.value);
+    if (!c) return;
+    var text = cs.cards.value.replace(/\s+$/, '');
+    cs.cards.value = (text ? text + ' ' : '') + c;
+    cs.pick.value = '';
+    syncPad(cs.pad);
+    csValidate();
+  }
+
+  function applyStack(useCustom) {
+    var custom = useCustom ? customStack : null;
+    STACK = custom ? custom.cards : MNEMONICA;
+    stackName = custom ? custom.name : '네모니카';
+    indexStack();
+    store('mnemonica-use-custom', custom ? '1' : '0');
+    $('stack-name').textContent = stackName;
+    $('stack-revert').hidden = !custom;
+    $('ac-stack').textContent = stackName;
+    $('ac-top').innerHTML = label(STACK[0]);
+    renderList();
+  }
+
+  cs.cards.addEventListener('input', csValidate);
+  cs.save.addEventListener('click', function () {
+    var r = csValidate();
+    if (!r.ok) return;
+    customStack = { name: cs.name.value.trim() || '내 스택', cards: r.cards };
+    store('mnemonica-custom', JSON.stringify(customStack));
+    applyStack(true);
+    cs.status.innerHTML = '저장했어요. 이제 모든 탭이 <b>' + stackName + '</b> 기준으로 작동해요.';
+  });
+  function revert() {
+    applyStack(false);
+    if (!ui.custom.hidden) cs.status.innerHTML = '네모니카로 되돌렸어요. 입력한 스택은 저장돼 있어서 <b>이 스택 사용</b>으로 다시 쓸 수 있어요.';
+  }
+  $('cs-revert').addEventListener('click', revert);
+  $('stack-revert').addEventListener('click', revert);
 
   function quizPad() {
     q.input.readOnly = isTouch();
@@ -879,10 +1028,13 @@
     document.documentElement.classList.toggle('touch', isTouch());
     quizPad();
     acSelect(acEl.k);
+    if (!ui.custom.hidden) csOpen();
   }
   if (touchQuery.addEventListener) touchQuery.addEventListener('change', onInputTypeChange);
   document.documentElement.classList.toggle('touch', isTouch());
 
+  customStack = loadCustom();
+  applyStack(load('mnemonica-use-custom') === '1');
   showReady();
 })();
 </script>
