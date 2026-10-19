@@ -1,0 +1,507 @@
+<title>Mnemonica 암기 훈련</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif:wght@600&display=swap">
+<style>
+  /* Layout: one narrow column, mode switch → big prompt (card or number) → answer field → feedback */
+  :root {
+    --bg: #f6f6f5;
+    --fg: #1b1b1b;
+    --muted: #6b6b69;
+    --line: #d9d9d6;
+    --card: #ffffff;
+    --card-edge: #cfcfcb;
+    --red: #c62828;
+    --ok: #2e7d4f;
+    --font-body: "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    --font-index: "Noto Serif", Georgia, "Times New Roman", serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161616; --fg: #ececea; --muted: #9d9d9a; --line: #333331;
+      --card: #f3f3f1; --card-edge: #444442; --red: #c62828; --ok: #5fbf86;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161616; --fg: #ececea; --muted: #9d9d9a; --line: #333331;
+    --card: #f3f3f1; --card-edge: #444442; --red: #c62828; --ok: #5fbf86;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { min-height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    word-break: keep-all;
+  }
+  .wrap {
+    max-width: 480px;
+    margin: 0 auto;
+    padding-block: 32px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  h1 { font-size: 1.25rem; margin: 0; text-wrap: balance; }
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--fg); }
+  .modes button {
+    font: inherit; font-size: 0.95rem; padding: 10px 8px;
+    background: transparent; color: var(--fg); border: 0; cursor: pointer;
+  }
+  .modes button + button { border-left: 1px solid var(--fg); }
+  .modes button[aria-pressed="true"] { background: var(--fg); color: var(--bg); font-weight: 500; }
+
+  .range { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.95rem; }
+  .range input { flex: 0 0 4.2em; font-size: 1rem; padding: 6px 8px; text-align: center; font-variant-numeric: tabular-nums; }
+  .apply {
+    font: inherit; font-size: 0.9rem; padding: 6px 12px;
+    background: var(--fg); color: var(--bg); border: 1px solid var(--fg); cursor: pointer;
+  }
+  .apply.ghost { background: transparent; color: var(--fg); }
+  .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+
+  .stage { display: flex; justify-content: center; align-items: center; min-height: 290px; }
+  .pcard {
+    position: relative;
+    width: 190px; max-width: 100%;
+    aspect-ratio: 5 / 7;
+    background: var(--card);
+    border: 1px solid var(--card-edge);
+    border-radius: 12px;
+    color: #1b1b1b;
+    font-family: var(--font-index);
+  }
+  .pcard.red { color: var(--red); }
+  .pcard .idx { position: absolute; display: flex; flex-direction: column; align-items: center; line-height: 1; gap: 2px; }
+  .pcard .idx b { font-size: 1.6rem; font-weight: 600; }
+  .pcard .idx i { font-style: normal; font-size: 1.3rem; }
+  .pcard .tl { top: 12px; left: 12px; }
+  .pcard .br { bottom: 12px; right: 12px; transform: rotate(180deg); }
+  .pcard .pip { position: absolute; inset: 0; display: grid; place-items: center; font-size: 5rem; line-height: 1; }
+  .num { font-size: 6rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .num small { display: block; font-size: 0.9rem; font-weight: 400; color: var(--muted); text-align: center; margin-top: 8px; }
+
+  form { display: flex; gap: 8px; }
+  input {
+    flex: 1; min-width: 0;
+    font: inherit; font-size: 1.2rem;
+    padding: 10px 12px;
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--fg); border-radius: 0;
+  }
+  input:focus-visible, button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .go {
+    font: inherit; font-size: 1rem; padding: 10px 18px;
+    background: var(--fg); color: var(--bg); border: 1px solid var(--fg); cursor: pointer;
+  }
+  .hint { color: var(--muted); font-size: 0.85rem; margin: -16px 0 0; }
+  .feedback { min-height: 1.8em; font-weight: 500; font-size: 1.05rem; }
+  .feedback.ok { color: var(--ok); }
+  .feedback.bad { color: var(--red); }
+  .r { color: var(--red); }
+  .skip {
+    align-self: flex-start;
+    font: inherit; font-size: 0.85rem; color: var(--muted);
+    background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer;
+  }
+  .list { display: flex; flex-direction: column; gap: 12px; }
+  .list-note { margin: 0; color: var(--muted); font-size: 0.85rem; }
+  .rows { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 12px; }
+  .row { display: flex; flex-direction: column; border-top: 1px solid var(--fg); min-width: 0; }
+  .cell { display: flex; align-items: baseline; gap: 8px; padding: 5px 2px; border-bottom: 1px solid var(--line); }
+  .cell em { font-style: normal; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.4em; text-align: right; }
+  .cell b { font-family: var(--font-index); font-weight: 600; font-size: 1rem; white-space: nowrap; }
+  @media (max-width: 420px) {
+    .rows { gap: 0 8px; }
+    .cell { gap: 5px; }
+    .modes button { font-size: 0.85rem; padding: 10px 2px; }
+  }
+  .timers { display: flex; justify-content: space-between; margin-top: -16px; font-size: 0.85rem; color: var(--muted); }
+  .timers b { color: var(--fg); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .timers b.slow { color: var(--red); }
+  .r-time { color: var(--muted); font-size: 0.8rem; }
+  .times { margin: 0; font-variant-numeric: tabular-nums; }
+  .tag { font-size: 0.75rem; color: var(--red); border: 1px solid currentColor; padding: 0 4px; margin-left: 6px; font-weight: 400; white-space: nowrap; }
+  .quiz { display: flex; flex-direction: column; gap: 24px; }
+  .result { display: flex; flex-direction: column; gap: 12px; }
+  .result h2 { font-size: 1.1rem; margin: 0; }
+  .result h3 { font-size: 0.95rem; margin: 16px 0 0; border-bottom: 1px solid var(--fg); padding-bottom: 4px; }
+  .result h3 span { color: var(--muted); font-weight: 400; }
+  .rate { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .rate b { font-size: 3.5rem; line-height: 1; font-variant-numeric: tabular-nums; }
+  .rate span { color: var(--muted); }
+  .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips li { border: 1px solid var(--line); padding: 2px 8px; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+  .chips li em { font-style: normal; color: var(--muted); margin-right: 4px; }
+  .misses { list-style: none; margin: 0; padding: 0; }
+  .misses li { border-bottom: 1px solid var(--line); padding: 10px 0; }
+  .misses .head { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .misses .why { color: var(--muted); font-size: 0.9rem; margin: 2px 0 0; padding-left: 1.1em; }
+  .misses .why li { border: 0; padding: 0; list-style: disc; }
+  .empty { color: var(--muted); font-size: 0.9rem; margin: 0; }
+  .done { align-self: stretch; margin-top: 16px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .shake { animation: shake 0.25s; }
+    @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+  }
+</style>
+
+<div class="wrap">
+  <h1>Mnemonica 암기 훈련</h1>
+
+  <div class="modes" role="group" aria-label="연습 방식">
+    <button type="button" id="mode-card" aria-pressed="true">카드 → 번호</button>
+    <button type="button" id="mode-num" aria-pressed="false">번호 → 카드</button>
+    <button type="button" id="mode-list" aria-pressed="false">전체 순서</button>
+  </div>
+
+  <form class="range" id="range-form" autocomplete="off">
+    <span>범위</span>
+    <input id="range-lo" type="number" inputmode="numeric" min="1" max="52" value="1" aria-label="시작 번호">
+    <span>–</span>
+    <input id="range-hi" type="number" inputmode="numeric" min="1" max="52" value="52" aria-label="끝 번호">
+    <span>번</span>
+    <button type="submit" class="apply">적용</button>
+    <button type="button" class="apply ghost" id="range-all">전체</button>
+  </form>
+
+  <div class="quiz" id="quiz">
+    <div class="meta">
+      <span id="progress">1 / 52</span>
+      <span id="score">맞힘 0 · 틀림 0</span>
+    </div>
+    <div class="timers" aria-label="타이머">
+      <span>전체 <b id="t-total">0:00</b></span>
+      <span>이 카드 <b id="t-card">0.0초</b></span>
+    </div>
+
+    <div class="stage" id="stage" aria-live="polite"></div>
+
+    <form id="form" autocomplete="off">
+      <input id="answer" name="answer" aria-label="답 입력" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <button class="go" type="submit">확인</button>
+    </form>
+    <p class="hint" id="hint"></p>
+
+    <div class="feedback" id="feedback" role="status"></div>
+    <button type="button" class="skip" id="skip">모르겠어요 (정답 보고 넘어가기)</button>
+  </div>
+
+  <section class="list" id="list" hidden aria-label="Mnemonica 전체 순서">
+    <p class="list-note">1번이 덱 맨 위 카드입니다. 13장씩 4열, 위에서 아래로.</p>
+    <div class="rows" id="rows"></div>
+  </section>
+
+  <section class="result" id="result" hidden aria-labelledby="result-title">
+    <h2 id="result-title">결과</h2>
+    <div class="rate"><b id="rate">0%</b><span id="rate-sub"></span></div>
+    <p class="times" id="times"></p>
+
+    <h3>느린 카드 <span id="slow-count"></span></h3>
+    <ul class="chips" id="slow-list"></ul>
+
+    <h3>맞힌 카드 <span id="right-count"></span></h3>
+    <ul class="chips" id="right-list"></ul>
+
+    <h3>틀린 카드 <span id="wrong-count"></span></h3>
+    <ul class="misses" id="wrong-list"></ul>
+
+    <button type="button" class="go done" id="done">확인</button>
+  </section>
+</div>
+
+<script>
+(function () {
+  // Mnemonica order, positions 1–52 (Tamariz, Mnemonica p.14)
+  var STACK = '4C 2H 7D 3C 4H 6D AS 5H 9S 2S QH 3D QC 8H 6S 5S 9H KC 2D JH 3S 8S 6H 10C 5D KD 2C 3H 8D 5C KS JD 8C 10S KH JC 7S 10H AD 4S 7H 4D AC 9C JS QD 7C QS 10D 6C AH 9D'.split(' ');
+  var SYM = { S: '♠', H: '♥', D: '♦', C: '♣' };
+
+  // Accepts 4C, 4♣, 10d, TD, qh, 4클, 클로버4, 하트Q, 퀸하트, 에이스스페이드 …
+  function parseCard(raw) {
+    var s = String(raw).toUpperCase().replace(/\s+/g, '').replace(/OF/g, '');
+    var suit = null, m;
+    // Whole words and symbols first, so the S in "HEARTS" is not read as spades
+    var suitWords = [
+      [/♠|♤|스페이드|스페|SPADES?/, 'S'],
+      [/♥|♡|하트|HEARTS?/, 'H'],
+      [/♦|♢|다이아몬드|다이아|DIAMONDS?/, 'D'],
+      [/♣|♧|클로버|클럽|CLUBS?/, 'C'],
+      // Single letters or syllables only at the start or end: 4C, C4, 4클
+      [/^(S|스)|(S|스)$/, 'S'],
+      [/^(H|하)|(H|하)$/, 'H'],
+      [/^(D|다)|(D|다)$/, 'D'],
+      [/^(C|클)|(C|클)$/, 'C']
+    ];
+    for (var i = 0; i < suitWords.length; i++) {
+      m = s.match(suitWords[i][0]);
+      if (m) { suit = suitWords[i][1]; s = s.replace(m[0], ''); break; }
+    }
+    if (!suit) return null;
+    var rankMap = { 'A': 'A', '1': 'A', '에이스': 'A', '에이': 'A', 'ACE': 'A', 'J': 'J', '잭': 'J', 'JACK': 'J',
+      'Q': 'Q', '퀸': 'Q', 'QUEEN': 'Q', 'K': 'K', '킹': 'K', 'KING': 'K', 'T': '10' };
+    var rank = rankMap[s] || (/^(10|[2-9])$/.test(s) ? s : null);
+    return rank ? rank + suit : null;
+  }
+
+  function label(code) {
+    var suit = code.slice(-1);
+    var txt = code.slice(0, -1) + SYM[suit];
+    return (suit === 'H' || suit === 'D') ? '<span class="r">' + txt + '</span>' : txt;
+  }
+
+  function cardHTML(code) {
+    var rank = code.slice(0, -1), suit = code.slice(-1);
+    var red = suit === 'H' || suit === 'D';
+    var name = rank + ' ' + { S: '스페이드', H: '하트', D: '다이아몬드', C: '클럽' }[suit];
+    return '<div class="pcard' + (red ? ' red' : '') + '" role="img" aria-label="' + name + '">' +
+      '<span class="idx tl"><b>' + rank + '</b><i>' + SYM[suit] + '</i></span>' +
+      '<span class="pip">' + SYM[suit] + '</span>' +
+      '<span class="idx br"><b>' + rank + '</b><i>' + SYM[suit] + '</i></span></div>';
+  }
+
+  var el = {
+    stage: document.getElementById('stage'), form: document.getElementById('form'),
+    input: document.getElementById('answer'), feedback: document.getElementById('feedback'),
+    hint: document.getElementById('hint'), progress: document.getElementById('progress'),
+    score: document.getElementById('score'), skip: document.getElementById('skip'),
+    mCard: document.getElementById('mode-card'), mNum: document.getElementById('mode-num'),
+    mList: document.getElementById('mode-list'), list: document.getElementById('list'),
+    range: document.getElementById('range-form'),
+    quiz: document.getElementById('quiz'), result: document.getElementById('result')
+  };
+
+  // Each question gets one retry. A right answer on either try counts as right.
+  var mode = 'card', order = [], step = 0, locked = false, timer = null;
+  var log = [], tries = [];
+  // Timers: whole round, and each card from when it appears until it is answered
+  var SLOW_MS = 4000, roundStart = 0, cardStart = 0, cardFrozen = null, tick = null;
+  var tTotal = document.getElementById('t-total'), tCard = document.getElementById('t-card');
+  function now() { return performance.now(); }
+  function fmtTotal(ms) { var s = Math.floor(ms / 1000); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
+  function fmtSec(ms) { return (ms / 1000).toFixed(1) + '초'; }
+  function slowTag(r) { return r.ms > SLOW_MS ? '<span class="tag">느림 ' + fmtSec(r.ms) + '</span>' : ''; }
+  function updateTimers() {
+    var c = cardFrozen != null ? cardFrozen : now() - cardStart;
+    tTotal.textContent = fmtTotal(now() - roundStart);
+    tCard.textContent = fmtSec(c);
+    tCard.className = c > SLOW_MS ? 'slow' : '';
+  }
+  function stopTick() { clearInterval(tick); tick = null; }
+  var lo = 1, hi = 52;
+  var rLo = document.getElementById('range-lo'), rHi = document.getElementById('range-hi');
+
+  try {
+    var saved = JSON.parse(localStorage.getItem('mnemonica-range') || 'null');
+    if (saved && saved[0] >= 1 && saved[1] <= 52 && saved[0] <= saved[1]) { lo = saved[0]; hi = saved[1]; }
+  } catch (e) {}
+  rLo.value = lo; rHi.value = hi;
+
+  function rightCount() { return log.filter(function (r) { return r.ok; }).length; }
+
+  function startRound() {
+    clearTimeout(timer);
+    order = [];
+    for (var i = lo - 1; i < hi; i++) order.push(i);
+    for (var j = order.length - 1; j > 0; j--) { var k = Math.floor(Math.random() * (j + 1)); var t = order[j]; order[j] = order[k]; order[k] = t; }
+    step = 0; log = [];
+    el.result.hidden = true; el.quiz.hidden = false;
+    roundStart = now();
+    stopTick(); tick = setInterval(updateTimers, 100);
+    render();
+  }
+
+  function render() {
+    var pos = order[step];
+    tries = [];
+    cardStart = now(); cardFrozen = null; updateTimers();
+    el.progress.textContent = (step + 1) + ' / ' + order.length + (lo === 1 && hi === 52 ? '' : '  (' + lo + '–' + hi + '번)');
+    el.score.textContent = '맞힘 ' + rightCount() + ' · 틀림 ' + (log.length - rightCount());
+    el.feedback.textContent = ''; el.feedback.className = 'feedback';
+    el.input.value = '';
+    locked = false;
+    if (mode === 'card') {
+      el.stage.innerHTML = cardHTML(STACK[pos]);
+      el.input.setAttribute('inputmode', 'numeric');
+      el.input.placeholder = '번호 (1–52)';
+      el.hint.textContent = '숫자만 입력하고 Enter를 누르세요.';
+    } else {
+      el.stage.innerHTML = '<div class="num">' + (pos + 1) + '<small>번째 카드는?</small></div>';
+      el.input.setAttribute('inputmode', 'text');
+      el.input.placeholder = '예: 4C, QH, 10D, AS';
+      el.hint.textContent = '숫자/문자 + 무늬. S·H·D·C, ♠♥♦♣, 스페이드·하트·다이아·클럽 모두 됩니다.';
+    }
+    el.input.focus();
+  }
+
+  function finish(ok, skipped) {
+    cardFrozen = now() - cardStart; updateTimers();
+    log.push({ pos: order[step], mode: mode, tries: tries.slice(), ok: ok, skipped: !!skipped, ms: cardFrozen });
+    el.score.textContent = '맞힘 ' + rightCount() + ' · 틀림 ' + (log.length - rightCount());
+    locked = true;
+  }
+
+  function advance() {
+    step++;
+    if (step >= order.length) showResult(); else render();
+  }
+
+  function answerText(r) { return r.mode === 'card' ? (r.pos + 1) + '번' : label(STACK[r.pos]); }
+
+  // Explains each wrong try: what the typed answer actually is in the stack
+  function reasons(r) {
+    var out = r.tries.map(function (t, i) {
+      var nth = r.tries.length > 1 ? (i === 0 ? '첫 번째' : '두 번째') + ' 답 ' : '답 ';
+      if (r.mode === 'card') {
+        return nth + '<b>' + t + '번</b>: ' + t + '번은 ' + label(STACK[t - 1]) + '이에요.';
+      }
+      return nth + '<b>' + label(t) + '</b>: ' + label(t) + '는 ' + (STACK.indexOf(t) + 1) + '번 카드예요.';
+    });
+    if (r.skipped) out.push('모르겠어요를 눌렀어요.');
+    out.push('걸린 시간 ' + fmtSec(r.ms) + (r.ms > SLOW_MS ? ' (느림)' : ''));
+    out.push(r.mode === 'card'
+      ? label(STACK[r.pos]) + '는 <b>' + (r.pos + 1) + '번</b>이에요.'
+      : (r.pos + 1) + '번은 <b>' + label(STACK[r.pos]) + '</b>예요.');
+    return out;
+  }
+
+  function showResult() {
+    var totalMs = now() - roundStart;
+    stopTick();
+    var total = log.length, ok = rightCount();
+    var sorted = log.slice().sort(function (a, b) { return a.pos - b.pos; });
+    document.getElementById('rate').textContent = Math.round(ok / total * 100) + '%';
+    document.getElementById('rate-sub').textContent = total + '장 중 ' + ok + '장 맞힘' + (lo === 1 && hi === 52 ? '' : ' (' + lo + '–' + hi + '번)');
+    var slows = sorted.filter(function (r) { return r.ms > SLOW_MS; });
+    var avg = log.reduce(function (s, r) { return s + r.ms; }, 0) / total;
+    document.getElementById('times').textContent = '전체 ' + fmtTotal(totalMs) + ' · 한 장 평균 ' + fmtSec(avg) + ' · 느림(4초 초과) ' + slows.length + '장';
+    document.getElementById('slow-count').textContent = slows.length + '장';
+    document.getElementById('slow-list').innerHTML = slows.length
+      ? slows.map(function (r) { return '<li><em>' + (r.pos + 1) + '</em>' + label(STACK[r.pos]) + ' <span class="r-time">' + fmtSec(r.ms) + '</span></li>'; }).join('')
+      : '<li class="empty" style="border:0">없음. 모두 4초 안에 답했어요.</li>';
+    var rights = sorted.filter(function (r) { return r.ok; });
+    var wrongs = sorted.filter(function (r) { return !r.ok; });
+    document.getElementById('right-count').textContent = rights.length + '장';
+    document.getElementById('wrong-count').textContent = wrongs.length + '장';
+    document.getElementById('right-list').innerHTML = rights.length
+      ? rights.map(function (r) { return '<li><em>' + (r.pos + 1) + '</em>' + label(STACK[r.pos]) + slowTag(r) + '</li>'; }).join('')
+      : '<li class="empty" style="border:0">없음</li>';
+    document.getElementById('wrong-list').innerHTML = wrongs.length
+      ? wrongs.map(function (r) {
+          var head = r.mode === 'card'
+            ? label(STACK[r.pos]) + ' → 정답 ' + (r.pos + 1) + '번'
+            : (r.pos + 1) + '번 → 정답 ' + label(STACK[r.pos]);
+          return '<li><div class="head">' + head + slowTag(r) + '</div><ul class="why">' +
+            reasons(r).map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></li>';
+        }).join('')
+      : '<li class="empty" style="border:0">없음. 모두 맞혔어요!</li>';
+    el.quiz.hidden = true; el.result.hidden = false;
+    document.getElementById('done').focus();
+  }
+
+  function setRange(a, b) {
+    if (!(a >= 1 && a <= 52 && b >= 1 && b <= 52) || a % 1 || b % 1) {
+      el.feedback.textContent = '범위는 1부터 52 사이의 정수로 입력하세요.'; el.feedback.className = 'feedback bad';
+      return;
+    }
+    if (a > b) { var t = a; a = b; b = t; }
+    lo = a; hi = b; rLo.value = lo; rHi.value = hi;
+    try { localStorage.setItem('mnemonica-range', JSON.stringify([lo, hi])); } catch (e) {}
+    startRound();
+  }
+
+  document.getElementById('range-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    setRange(Number(rLo.value), Number(rHi.value));
+  });
+  document.getElementById('range-all').addEventListener('click', function () { setRange(1, 52); });
+  document.getElementById('done').addEventListener('click', startRound);
+
+  // 4 columns of 13, read top to bottom: 1–13, 14–26, 27–39, 40–52
+  document.getElementById('rows').innerHTML = [0, 13, 26, 39].map(function (start) {
+    var cells = '';
+    for (var i = start; i < start + 13; i++) cells += '<div class="cell"><em>' + (i + 1) + '</em><b>' + label(STACK[i]) + '</b></div>';
+    return '<div class="row">' + cells + '</div>';
+  }).join('');
+
+  function setMode(m) {
+    el.mCard.setAttribute('aria-pressed', m === 'card');
+    el.mNum.setAttribute('aria-pressed', m === 'num');
+    el.mList.setAttribute('aria-pressed', m === 'list');
+    var isList = m === 'list';
+    el.list.hidden = !isList;
+    el.range.hidden = isList;
+    if (isList) {
+      clearTimeout(timer); stopTick();
+      el.quiz.hidden = true; el.result.hidden = true;
+      return;
+    }
+    mode = m;
+    startRound();
+  }
+
+  el.form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (locked) return;
+    var pos = order[step], val = el.input.value.trim();
+    if (!val) return;
+    var given, correct;
+    if (mode === 'card') {
+      var n = parseInt(val, 10);
+      if (!/^\d+$/.test(val) || n < 1 || n > 52) {
+        el.feedback.textContent = '1부터 52 사이의 숫자를 입력하세요.'; el.feedback.className = 'feedback bad';
+        return;
+      }
+      given = n; correct = n === pos + 1;
+    } else {
+      var c = parseCard(val);
+      if (!c) {
+        el.feedback.textContent = '카드를 알아볼 수 없어요. 예: 4C, QH, 10D'; el.feedback.className = 'feedback bad';
+        return;
+      }
+      given = c; correct = c === STACK[pos];
+    }
+    if (correct) {
+      var first = tries.length === 0;
+      finish(true);
+      el.feedback.textContent = first ? '정답!' : '정답! (두 번째 시도)';
+      el.feedback.className = 'feedback ok';
+      timer = setTimeout(advance, 700);
+      return;
+    }
+    tries.push(given);
+    el.form.classList.remove('shake'); void el.form.offsetWidth; el.form.classList.add('shake');
+    if (tries.length === 1) {
+      el.feedback.textContent = '틀렸어요. 기회가 한 번 더 있어요.'; el.feedback.className = 'feedback bad';
+      el.input.value = ''; el.input.focus();
+    } else {
+      finish(false);
+      el.feedback.innerHTML = '틀렸어요. 정답은 ' + answerText(log[log.length - 1]) + '이에요.';
+      el.feedback.className = 'feedback bad';
+      timer = setTimeout(advance, 1800);
+    }
+  });
+
+  el.skip.addEventListener('click', function () {
+    if (locked) return;
+    finish(false, true);
+    el.feedback.innerHTML = '정답: ' + answerText(log[log.length - 1]);
+    el.feedback.className = 'feedback';
+    timer = setTimeout(advance, 1600);
+  });
+
+  el.mCard.addEventListener('click', function () { setMode('card'); });
+  el.mNum.addEventListener('click', function () { setMode('num'); });
+  el.mList.addEventListener('click', function () { setMode('list'); });
+
+  window.__parseCard = parseCard;
+  startRound();
+})();
+</script>
