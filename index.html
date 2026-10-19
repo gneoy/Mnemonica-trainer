@@ -1,4 +1,5 @@
 <title>Mnemonica 암기 훈련</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -177,6 +178,61 @@
   .cell em { font-style: normal; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.4em; text-align: right; }
   .cell b { font-family: var(--font-index); font-weight: 600; font-size: 1rem; white-space: nowrap; }
 
+  /* On-screen keypads (touch devices only) */
+  .keypad { display: flex; flex-direction: column; gap: 6px; }
+  .kp-grid { display: grid; gap: 6px; }
+  .kp-num { grid-template-columns: repeat(3, 1fr); }
+  .kp-ranks { grid-template-columns: repeat(7, 1fr); }
+  .kp-suits { grid-template-columns: repeat(4, 1fr); }
+  .kp-actions { grid-template-columns: 1fr 2fr; }
+  .keypad button {
+    min-height: 52px; padding: 4px 0;
+    font-size: 1.3rem; font-variant-numeric: tabular-nums;
+    background: var(--bg); color: var(--fg); border: 1px solid var(--fg);
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1;
+  }
+  .keypad button small { font-size: 0.65rem; color: var(--muted); }
+  .kp-ranks button { font-family: var(--font-index); font-size: 1.15rem; min-height: 48px; }
+  .kp-suits button { font-size: 1.6rem; }
+  .kp-suits button.red { color: var(--red); }
+  .keypad button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+  .keypad button[aria-pressed="true"] small { color: var(--bg); }
+  .keypad .kp-ok { background: var(--fg); color: var(--bg); font-size: 1.1rem; }
+  .keypad .kp-del { font-size: 1.1rem; }
+  .keypad button:active { opacity: 0.6; }
+  .touch .answer form .go, .touch .ac-form .go, .touch #hint { display: none; }
+  .touch input[readonly] { caret-color: transparent; }
+  .ac-form input.active { outline: 2px solid var(--fg); outline-offset: 0; }
+
+  /* Phones: tighter spacing, smaller card so the keypad fits on screen */
+  @media (max-width: 480px) {
+    .wrap { padding-block: 12px 24px; gap: 14px; }
+    h1 { font-size: 1.1rem; }
+    .quiz, .acaan { gap: 12px; }
+    .stage { min-height: 0; }
+    .pcard { width: 112px; border-radius: 10px; }
+    .pcard .pip { font-size: 3rem; }
+    .pcard .idx b { font-size: 1.1rem; }
+    .pcard .idx i { font-size: 0.9rem; }
+    .pcard .tl { top: 8px; left: 8px; }
+    .pcard .br { bottom: 8px; right: 8px; }
+    .num { font-size: 3.6rem; }
+    .num small { margin-top: 4px; }
+    .answer input, .ac-form input { font-size: 1.1rem; padding: 8px 12px; }
+    .keypad button { min-height: 48px; }
+    .kp-ranks button { min-height: 44px; }
+    .ready { padding-block: 32px; }
+    .feedback { min-height: 1.6em; font-size: 1rem; }
+    .ac-q { gap: 20px; }
+    .ac-q .pcard { width: 88px; }
+    .ac-q .pcard .pip { font-size: 2.4rem; }
+    .ac-n b { font-size: 3rem; }
+    .acaan > .muted:first-child { font-size: 0.8rem; line-height: 1.5; }
+    .ac-form label + input { margin-bottom: 4px; }
+    #ac-keypad button { min-height: 44px; }
+  }
+
   @media (max-width: 420px) {
     .modes { grid-template-columns: repeat(2, 1fr); }
     .modes button { font-size: 0.9rem; padding: 10px 2px; }
@@ -233,6 +289,7 @@
         <input id="answer" aria-label="답 입력" autocomplete="off" autocapitalize="characters" spellcheck="false">
         <button class="go" type="submit">확인</button>
       </form>
+      <div class="keypad" id="keypad" hidden></div>
       <p class="muted" id="hint"></p>
     </div>
 
@@ -271,6 +328,7 @@
       <input id="ac-cut" type="text" autocapitalize="characters" spellcheck="false" placeholder="예: 8C, 8♣">
       <button class="go" type="submit">확인</button>
     </form>
+    <div class="keypad" id="ac-keypad" hidden></div>
     <div class="feedback" id="ac-feedback" role="status"></div>
     <div class="ac-explain" id="ac-explain" hidden></div>
     <div class="ac-actions">
@@ -364,6 +422,81 @@
   function fmtTotal(ms) { var s = Math.floor(ms / 1000); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
   function fmtSec(ms) { return (ms / 1000).toFixed(1) + '초'; }
 
+  function submitForm(f) {
+    if (f.requestSubmit) f.requestSubmit();
+    else f.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+  }
+
+  /* ---------- On-screen keypads (touch devices) ---------- */
+
+  // Phones and tablets get keypads instead of the system keyboard. #keypad in the URL forces them on.
+  var touchQuery = window.matchMedia('(hover: none) and (pointer: coarse)');
+  function isTouch() { return touchQuery.matches || location.hash === '#keypad'; }
+  function focusField(input) { if (!isTouch()) input.focus(); }
+
+  var RANK_KEYS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+  var SUIT_KEYS = ['S', 'H', 'D', 'C'];
+
+  function padHTML(type) {
+    if (type === 'num') {
+      var keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(function (d) { return '<button type="button" data-k="' + d + '">' + d + '</button>'; });
+      keys.push('<button type="button" class="kp-del" data-k="del" aria-label="지우기">⌫</button>',
+        '<button type="button" data-k="0">0</button>',
+        '<button type="button" class="kp-ok" data-k="ok">확인</button>');
+      return '<div class="kp-grid kp-num">' + keys.join('') + '</div>';
+    }
+    return '<div class="kp-grid kp-ranks">' + RANK_KEYS.map(function (r, i) {
+        return '<button type="button" data-k="r" data-v="' + r + '">' + r + (/[AJQK]/.test(r) ? '<small>' + (i + 1) + '</small>' : '') + '</button>';
+      }).join('') + '</div>' +
+      '<div class="kp-grid kp-suits">' + SUIT_KEYS.map(function (s) {
+        return '<button type="button" data-k="s" data-v="' + SYM[s] + '" aria-label="' + SUIT_NAME[s] + '"' + (s === 'H' || s === 'D' ? ' class="red"' : '') + '>' + SYM[s] + '</button>';
+      }).join('') + '</div>' +
+      '<div class="kp-grid kp-actions"><button type="button" class="kp-del" data-k="del">⌫ 지우기</button><button type="button" class="kp-ok" data-k="ok">확인</button></div>';
+  }
+
+  // Card field holds "rank + suit symbol", e.g. "Q♥"; either part can be picked first
+  function cardParts(value) {
+    var m = String(value).match(/^(10|[AJQK2-9])?([♠♥♦♣])?$/) || [];
+    return { rank: m[1] || '', suit: m[2] || '' };
+  }
+
+  // Highlights the picked rank and suit on a card keypad
+  function syncPad(pad) {
+    var cfg = pad.cfg;
+    if (!cfg || cfg.type !== 'card') return;
+    var parts = cardParts(cfg.input.value);
+    Array.prototype.forEach.call(pad.querySelectorAll('[data-v]'), function (b) {
+      b.setAttribute('aria-pressed', b.dataset.v === parts.rank || b.dataset.v === parts.suit);
+    });
+  }
+
+  function renderPad(pad, type, input, submit) {
+    document.documentElement.classList.toggle('touch', isTouch());
+    pad.hidden = !isTouch();
+    if (pad.hidden) return;
+    if (!pad.cfg || pad.cfg.type !== type) pad.innerHTML = padHTML(type);
+    pad.cfg = { type: type, input: input, submit: submit };
+    syncPad(pad);
+  }
+
+  function onPadTap(e) {
+    var b = e.target.closest('button'), pad = e.currentTarget, cfg = pad.cfg;
+    if (!b || !cfg) return;
+    var k = b.dataset.k, input = cfg.input;
+    if (k === 'ok') return cfg.submit();
+    if (cfg.type === 'num') {
+      if (k === 'del') input.value = input.value.slice(0, -1);
+      else if (input.value.length < 2) input.value += k;
+      return;
+    }
+    var parts = cardParts(input.value);
+    if (k === 'del') { if (parts.suit) parts.suit = ''; else parts.rank = ''; }
+    else if (k === 'r') parts.rank = b.dataset.v;
+    else if (k === 's') parts.suit = b.dataset.v;
+    input.value = parts.rank + parts.suit;
+    syncPad(pad);
+  }
+
   /* ---------- Settings: range and slow-card limit (remembered in this browser) ---------- */
 
   var settings = { lo: 1, hi: 52, slowMs: 4000 };
@@ -442,8 +575,9 @@
   // Timers run for the whole round and for each card from when it appears until it is settled.
   var q = {
     stage: $('stage'), form: $('form'), input: $('answer'), hint: $('hint'), feedback: $('feedback'),
-    progress: $('progress'), score: $('score'), tTotal: $('t-total'), tCard: $('t-card')
+    progress: $('progress'), score: $('score'), tTotal: $('t-total'), tCard: $('t-card'), pad: $('keypad')
   };
+  q.pad.addEventListener('click', onPadTap);
   var round = { order: [], step: 0, log: [], right: 0, tries: [], locked: false, start: 0, cardStart: 0, cardMs: null };
   var advanceTimer = null, tick = null;
 
@@ -465,7 +599,7 @@
   function showReady() {
     stopRound();
     ui.quiz.hidden = ui.result.hidden = true;
-    ui.ready.hidden = false;
+    ui.ready.hidden = ui.settings.hidden = false;
     $('ready-title').textContent = MODE_TITLE[mode];
     updateReadySub();
     $('start').focus();
@@ -477,7 +611,7 @@
     round.order = shuffled(order);
     round.step = 0; round.log = []; round.right = 0;
     round.start = now();
-    ui.ready.hidden = ui.result.hidden = true;
+    ui.ready.hidden = ui.result.hidden = ui.settings.hidden = true;
     ui.quiz.hidden = false;
     stopRound();
     tick = setInterval(updateTimers, 100);
@@ -504,7 +638,8 @@
       q.input.placeholder = '예: 4C, QH, 10D, AS';
       q.hint.textContent = '숫자/문자 + 무늬. S·H·D·C, ♠♥♦♣, 스페이드·하트·다이아·클럽 모두 됩니다.';
     }
-    q.input.focus();
+    quizPad();
+    focusField(q.input);
   }
 
   // Settles the current card and moves on after a pause
@@ -546,7 +681,7 @@
     shake(q.form);
     if (round.tries.length === 1) {
       setFeedback(q.feedback, '틀렸어요. 기회가 한 번 더 있어요.', 'bad');
-      q.input.value = ''; q.input.focus();
+      q.input.value = ''; syncPad(q.pad); focusField(q.input);
     } else {
       var rec = settle(false, false, 1800);
       setFeedback(q.feedback, '틀렸어요. 정답은 ' + answerText(rec) + '이에요.', 'bad');
@@ -635,8 +770,27 @@
   var ac = { p: 0, n: 0, tries: 0, done: false, right: 0, wrong: 0 };
   var acEl = {
     card: $('ac-card'), num: $('ac-num'), k: $('ac-k'), cut: $('ac-cut'), form: $('ac-form'),
-    fb: $('ac-feedback'), explain: $('ac-explain'), skip: $('ac-skip'), next: $('ac-next'), score: $('ac-score')
+    fb: $('ac-feedback'), explain: $('ac-explain'), skip: $('ac-skip'), next: $('ac-next'), score: $('ac-score'),
+    pad: $('ac-keypad')
   };
+  acEl.pad.addEventListener('click', onPadTap);
+
+  // On touch devices the keypad edits whichever field is selected; 확인 on the count moves to the card
+  function acSelect(field) {
+    acEl.k.readOnly = acEl.cut.readOnly = isTouch();
+    acEl.k.classList.toggle('active', isTouch() && field === acEl.k);
+    acEl.cut.classList.toggle('active', isTouch() && field === acEl.cut);
+    if (field === acEl.k) {
+      renderPad(acEl.pad, 'num', acEl.k, function () {
+        if (!ac.done && !acEl.cut.value) acSelect(acEl.cut); else submitForm(acEl.form);
+      });
+    } else {
+      renderPad(acEl.pad, 'card', acEl.cut, function () { submitForm(acEl.form); });
+    }
+    focusField(field);
+  }
+  acEl.k.addEventListener('click', function () { acSelect(acEl.k); });
+  acEl.cut.addEventListener('click', function () { acSelect(acEl.cut); });
 
   function acK(p, n) { return n < p ? p - n : 52 - (n - p); }
 
@@ -651,7 +805,7 @@
     acEl.explain.hidden = acEl.next.hidden = true;
     acEl.skip.hidden = false;
     acEl.score.textContent = scoreText(ac.right, ac.wrong);
-    acEl.k.focus();
+    acSelect(acEl.k);
   }
 
   function acExplain() {
@@ -694,7 +848,7 @@
     if (ac.tries === 1) {
       var what = !kOk && !cOk ? '장수와 카드 둘 다' : (!kOk ? '장수가' : '컷할 카드가');
       setFeedback(acEl.fb, '틀렸어요. ' + what + ' 맞지 않아요. 기회가 한 번 더 있어요.', 'bad');
-      (kOk ? acEl.cut : acEl.k).focus();
+      acSelect(kOk ? acEl.cut : acEl.k);
     } else {
       setFeedback(acEl.fb, '틀렸어요. 정답은 ' + k + '장, ' + label(want) + '예요.', 'bad');
       acFinish(false);
@@ -716,6 +870,18 @@
       return '<div class="cell"><em>' + (start + i + 1) + '</em><b>' + label(c) + '</b></div>';
     }).join('') + '</div>';
   }).join('');
+
+  function quizPad() {
+    q.input.readOnly = isTouch();
+    renderPad(q.pad, mode === 'card' ? 'num' : 'card', q.input, function () { submitForm(q.form); });
+  }
+  function onInputTypeChange() {
+    document.documentElement.classList.toggle('touch', isTouch());
+    quizPad();
+    acSelect(acEl.k);
+  }
+  if (touchQuery.addEventListener) touchQuery.addEventListener('change', onInputTypeChange);
+  document.documentElement.classList.toggle('touch', isTouch());
 
   showReady();
 })();
